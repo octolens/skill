@@ -144,7 +144,7 @@ Put fields directly in filters. All conditions are ANDed together.
 
 ### Exclusions
 
-Prefix any array field with `!` to exclude values:
+Prefix any array field with ! to exclude values:
 
 ```json
 {
