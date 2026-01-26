@@ -21,8 +21,7 @@ npx add-skill octolens/skill
 
 ## Requirements
 
-- `curl` for API requests
-- `jq` for JSON parsing
+- Node.js 18+ (for fetch API support)
 - Octolens API key
 
 ## Usage

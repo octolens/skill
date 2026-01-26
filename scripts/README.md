@@ -1,31 +1,29 @@
 # Octolens API Scripts
 
-These bash scripts provide quick access to the Octolens API. All scripts require `curl` and `jq` to be installed.
+These Node.js scripts provide quick access to the Octolens API. All scripts require Node.js 18+ (for fetch API support).
 
 ## Prerequisites
 
 ```bash
-# Check if curl is installed
-curl --version
+# Check Node.js version (requires 18+)
+node --version
 
-# Check if jq is installed (for JSON parsing)
-jq --version
+# Install Node.js if needed (macOS)
+brew install node
 
-# Install jq if needed (macOS)
-brew install jq
-
-# Install jq if needed (Ubuntu/Debian)
-sudo apt-get install jq
+# Install Node.js if needed (Ubuntu/Debian)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 ```
 
 ## Available Scripts
 
-### 1. fetch-mentions.sh
+### 1. fetch-mentions.js
 
 Fetch mentions with basic parameters.
 
 ```bash
-./fetch-mentions.sh YOUR_API_KEY [limit] [includeAll]
+node scripts/fetch-mentions.js YOUR_API_KEY [limit] [includeAll]
 ```
 
 **Parameters:**
@@ -36,68 +34,68 @@ Fetch mentions with basic parameters.
 **Examples:**
 ```bash
 # Fetch 20 mentions (default)
-./fetch-mentions.sh your_api_key_here
+node scripts/fetch-mentions.js your_api_key_here
 
 # Fetch 50 mentions
-./fetch-mentions.sh your_api_key_here 50
+node scripts/fetch-mentions.js your_api_key_here 50
 
 # Fetch 30 mentions including low-relevance posts
-./fetch-mentions.sh your_api_key_here 30 true
+node scripts/fetch-mentions.js your_api_key_here 30 true
 ```
 
-### 2. list-keywords.sh
+### 2. list-keywords.js
 
 List all keywords configured for your organization.
 
 ```bash
-./list-keywords.sh YOUR_API_KEY
+node scripts/list-keywords.js YOUR_API_KEY
 ```
 
 **Example:**
 ```bash
-./list-keywords.sh your_api_key_here
+node scripts/list-keywords.js your_api_key_here
 ```
 
-### 3. list-views.sh
+### 3. list-views.js
 
 List all saved views (pre-configured filters).
 
 ```bash
-./list-views.sh YOUR_API_KEY
+node scripts/list-views.js YOUR_API_KEY
 ```
 
 **Example:**
 ```bash
-./list-views.sh your_api_key_here
+node scripts/list-views.js your_api_key_here
 ```
 
-### 4. query-mentions.sh
+### 4. query-mentions.js
 
 Query mentions with custom filter JSON.
 
 ```bash
-./query-mentions.sh YOUR_API_KEY '{"filter": "json"}'
+node scripts/query-mentions.js YOUR_API_KEY '{"filter": "json"}' [limit]
 ```
 
 **Examples:**
 ```bash
 # Filter by source
-./query-mentions.sh your_api_key_here '{"source": ["twitter", "reddit"]}'
+node scripts/query-mentions.js your_api_key_here '{"source": ["twitter", "reddit"]}'
 
 # Filter by sentiment
-./query-mentions.sh your_api_key_here '{"sentiment": ["positive"]}'
+node scripts/query-mentions.js your_api_key_here '{"sentiment": ["positive"]}'
 
 # Multiple filters (implicit AND)
-./query-mentions.sh your_api_key_here '{"source": ["twitter"], "sentiment": ["positive"], "minXFollowers": 1000}'
+node scripts/query-mentions.js your_api_key_here '{"source": ["twitter"], "sentiment": ["positive"], "minXFollowers": 1000}'
 
 # With exclusion
-./query-mentions.sh your_api_key_here '{"source": ["twitter"], "!tag": ["spam"]}'
+node scripts/query-mentions.js your_api_key_here '{"source": ["twitter"], "!tag": ["spam"]}'
 
 # Date range
-./query-mentions.sh your_api_key_here '{"startDate": "2024-01-01T00:00:00Z", "endDate": "2024-01-31T23:59:59Z"}'
+node scripts/query-mentions.js your_api_key_here '{"startDate": "2024-01-01T00:00:00Z", "endDate": "2024-01-31T23:59:59Z"}'
 
 # Combine multiple filters
-./query-mentions.sh your_api_key_here '{
+node scripts/query-mentions.js your_api_key_here '{
   "source": ["twitter", "linkedin"],
   "sentiment": ["positive"],
   "minXFollowers": 500,
@@ -105,12 +103,12 @@ Query mentions with custom filter JSON.
 }'
 ```
 
-### 5. advanced-query.sh
+### 5. advanced-query.js
 
 Query with complex AND/OR logic (demonstrates advanced filtering).
 
 ```bash
-./advanced-query.sh YOUR_API_KEY [limit]
+node scripts/advanced-query.js YOUR_API_KEY [limit]
 ```
 
 **Default query**: `(Twitter OR Reddit) AND (Positive sentiment) AND NOT spam`
@@ -118,10 +116,10 @@ Query with complex AND/OR logic (demonstrates advanced filtering).
 **Example:**
 ```bash
 # Use default query with 20 results
-./advanced-query.sh your_api_key_here
+node scripts/advanced-query.js your_api_key_here
 
 # Use default query with 50 results
-./advanced-query.sh your_api_key_here 50
+node scripts/advanced-query.js your_api_key_here 50
 ```
 
 ## Filter Fields Reference
@@ -130,7 +128,7 @@ Query with complex AND/OR logic (demonstrates advanced filtering).
 |-------|------|--------|
 | `source` | array | twitter, reddit, github, linkedin, youtube, hackernews, devto, stackoverflow, bluesky, newsletter, podcast |
 | `sentiment` | array | positive, neutral, negative |
-| `keyword` | array | Keyword IDs (get from list-keywords.sh) |
+| `keyword` | array | Keyword IDs (get from list-keywords.js) |
 | `language` | array | en, es, fr, de, pt, it, nl, ja, ko, zh |
 | `tag` | array | Tag names |
 | `bookmarked` | boolean | true or false |
@@ -146,13 +144,13 @@ Prefix any array field with `!` to exclude values:
 
 ```bash
 # Exclude spam tag
-'{"!tag": ["spam"]}'
+node scripts/query-mentions.js your_api_key_here '{"!tag": ["spam"]}'
 
 # Exclude specific keywords
-'{"!keyword": [5, 6]}'
+node scripts/query-mentions.js your_api_key_here '{"!keyword": [5, 6]}'
 
 # Exclude negative sentiment
-'{"!sentiment": ["negative"]}'
+node scripts/query-mentions.js your_api_key_here '{"!sentiment": ["negative"]}'
 ```
 
 ## Advanced Filtering
@@ -183,17 +181,17 @@ For complex AND/OR logic, use the `operator` and `groups` structure:
 
 ## Tips
 
-1. **Escape quotes**: When using filters in bash, escape quotes properly or use single quotes around the JSON
-2. **Pretty print**: All scripts use `jq '.'` for formatted output
-3. **Save responses**: Pipe output to a file: `./fetch-mentions.sh key > results.json`
-4. **Chain with jq**: Extract specific fields: `./list-keywords.sh key | jq '.data[].keyword'`
-5. **Error handling**: Scripts exit on error (`set -e`), check exit codes in your workflows
+1. **JSON formatting**: Scripts automatically format JSON output with proper indentation
+2. **Save responses**: Pipe output to a file: `node scripts/fetch-mentions.js key > results.json`
+3. **Chain with jq**: Extract specific fields: `node scripts/list-keywords.js key | jq '.data[].keyword'`
+4. **Error handling**: Scripts exit with non-zero code on error, check exit codes in your workflows
+5. **Node.js version**: Requires Node.js 18+ for native fetch API support
 
 ## Common Patterns
 
 ### Get positive mentions from high-follower accounts
 ```bash
-./query-mentions.sh your_api_key_here '{
+node scripts/query-mentions.js your_api_key_here '{
   "sentiment": ["positive"],
   "minXFollowers": 10000
 }'
@@ -201,23 +199,27 @@ For complex AND/OR logic, use the `operator` and `groups` structure:
 
 ### Get recent mentions (last 7 days)
 ```bash
-# Calculate date 7 days ago
+# Calculate date 7 days ago (macOS)
 START_DATE=$(date -u -v-7d +"%Y-%m-%dT%H:%M:%SZ")
-./query-mentions.sh your_api_key_here "{\"startDate\": \"$START_DATE\"}"
+node scripts/query-mentions.js your_api_key_here "{\"startDate\": \"$START_DATE\"}"
+
+# Calculate date 7 days ago (Linux)
+START_DATE=$(date -u -d '7 days ago' +"%Y-%m-%dT%H:%M:%SZ")
+node scripts/query-mentions.js your_api_key_here "{\"startDate\": \"$START_DATE\"}"
 ```
 
 ### Filter by specific keyword
 ```bash
 # First get keyword IDs
-./list-keywords.sh your_api_key_here | jq '.data[] | {id, keyword}'
+node scripts/list-keywords.js your_api_key_here | jq '.data[] | {id, keyword}'
 
 # Then filter by keyword ID
-./query-mentions.sh your_api_key_here '{"keyword": [1]}'
+node scripts/query-mentions.js your_api_key_here '{"keyword": [1]}'
 ```
 
 ### Exclude negative sentiment and spam
 ```bash
-./query-mentions.sh your_api_key_here '{
+node scripts/query-mentions.js your_api_key_here '{
   "!sentiment": ["negative"],
   "!tag": ["spam", "irrelevant"]
 }'
@@ -225,8 +227,8 @@ START_DATE=$(date -u -v-7d +"%Y-%m-%dT%H:%M:%SZ")
 
 ## Troubleshooting
 
-### "command not found: jq"
-Install jq: `brew install jq` (macOS) or `sudo apt-get install jq` (Ubuntu)
+### "fetch is not defined" or "fetch is not a function"
+You need Node.js 18+. Check your version: `node --version`. Upgrade if needed.
 
 ### "unauthorized" error
 Check your API key is correct and has proper permissions
@@ -235,4 +237,4 @@ Check your API key is correct and has proper permissions
 You've hit the 500 requests/hour limit. Wait for the rate limit to reset.
 
 ### Invalid JSON
-Ensure your filter JSON is properly formatted. Test with: `echo '{"source": ["twitter"]}' | jq`
+Ensure your filter JSON is properly formatted. Test with: `echo '{"source": ["twitter"]}' | node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync(0, 'utf-8')), null, 2))"`

@@ -5,8 +5,8 @@ license: MIT
 metadata:
   author: octolens
   version: "1.0"
-compatibility: Requires curl and jq for scripts, and access to the internet
-allowed-tools: Bash(curl) Bash(jq) Read
+compatibility: Requires Node.js 18+ (for fetch API) and access to the internet
+allowed-tools: Node Read
 ---
 
 # Octolens API Skill
@@ -207,22 +207,27 @@ This skill includes helper scripts for common operations. Use them to quickly in
 
 ### Fetch Mentions
 ```bash
-./scripts/fetch-mentions.sh YOUR_API_KEY
+node scripts/fetch-mentions.js YOUR_API_KEY [limit] [includeAll]
 ```
 
 ### List Keywords
 ```bash
-./scripts/list-keywords.sh YOUR_API_KEY
+node scripts/list-keywords.js YOUR_API_KEY
 ```
 
 ### List Views
 ```bash
-./scripts/list-views.sh YOUR_API_KEY
+node scripts/list-views.js YOUR_API_KEY
 ```
 
 ### Custom Filter Query
 ```bash
-./scripts/query-mentions.sh YOUR_API_KEY '{"source": ["twitter"], "sentiment": ["positive"]}'
+node scripts/query-mentions.js YOUR_API_KEY '{"source": ["twitter"], "sentiment": ["positive"]}' [limit]
+```
+
+### Advanced Query
+```bash
+node scripts/advanced-query.js YOUR_API_KEY [limit]
 ```
 
 ## Best Practices
@@ -308,7 +313,7 @@ When a user asks to query Octolens data:
 3. **Determine filters needed**: Source, sentiment, date range, etc.
 4. **Check if a view applies**: List views first if user mentions saved filters
 5. **Build the query**: Use simple mode first, advanced mode for complex logic
-6. **Execute the request**: Use curl or bundled scripts
+6. **Execute the request**: Use bundled Node.js scripts or fetch API directly
 7. **Parse results**: Extract key information (author, body, sentiment, source)
 8. **Handle pagination**: If more results needed, use cursor from response
 9. **Present findings**: Summarize insights, highlight patterns
@@ -318,57 +323,77 @@ When a user asks to query Octolens data:
 ### Example 1: Simple Query
 **User**: "Show me positive mentions from Twitter in the last 7 days"
 
-**Action**:
+**Action** (using bundled script):
 ```bash
-curl -X POST "https://app.octolens.com/api/v1/mentions" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "limit": 20,
-    "filters": {
-      "source": ["twitter"],
-      "sentiment": ["positive"],
-      "startDate": "2024-01-20T00:00:00Z"
-    }
-  }'
+node scripts/query-mentions.js YOUR_API_KEY '{"source": ["twitter"], "sentiment": ["positive"], "startDate": "2024-01-20T00:00:00Z"}'
+```
+
+**Alternative** (using fetch API directly):
+```javascript
+const response = await fetch('https://app.octolens.com/api/v1/mentions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    limit: 20,
+    filters: {
+      source: ['twitter'],
+      sentiment: ['positive'],
+      startDate: '2024-01-20T00:00:00Z',
+    },
+  }),
+});
+const data = await response.json();
 ```
 
 ### Example 2: Advanced Query
 **User**: "Find mentions from Reddit or GitHub, exclude spam tag, with positive or neutral sentiment"
 
-**Action**:
+**Action** (using bundled script):
 ```bash
-curl -X POST "https://app.octolens.com/api/v1/mentions" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "limit": 30,
-    "filters": {
-      "operator": "AND",
-      "groups": [
+node scripts/query-mentions.js YOUR_API_KEY '{"operator": "AND", "groups": [{"operator": "OR", "conditions": [{"source": ["reddit"]}, {"source": ["github"]}]}, {"operator": "OR", "conditions": [{"sentiment": ["positive"]}, {"sentiment": ["neutral"]}]}, {"operator": "AND", "conditions": [{"!tag": ["spam"]}]}]}'
+```
+
+**Alternative** (using fetch API directly):
+```javascript
+const response = await fetch('https://app.octolens.com/api/v1/mentions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    limit: 30,
+    filters: {
+      operator: 'AND',
+      groups: [
         {
-          "operator": "OR",
-          "conditions": [
-            { "source": ["reddit"] },
-            { "source": ["github"] }
-          ]
+          operator: 'OR',
+          conditions: [
+            { source: ['reddit'] },
+            { source: ['github'] },
+          ],
         },
         {
-          "operator": "OR",
-          "conditions": [
-            { "sentiment": ["positive"] },
-            { "sentiment": ["neutral"] }
-          ]
+          operator: 'OR',
+          conditions: [
+            { sentiment: ['positive'] },
+            { sentiment: ['neutral'] },
+          ],
         },
         {
-          "operator": "AND",
-          "conditions": [
-            { "!tag": ["spam"] }
-          ]
-        }
-      ]
-    }
-  }'
+          operator: 'AND',
+          conditions: [
+            { '!tag': ['spam'] },
+          ],
+        },
+      ],
+    },
+  }),
+});
+const data = await response.json();
 ```
 
 ### Example 3: Get Keywords First
@@ -377,26 +402,17 @@ curl -X POST "https://app.octolens.com/api/v1/mentions" \
 **Actions**:
 1. First, list keywords:
 ```bash
-curl "https://app.octolens.com/api/v1/keywords" \
-  -H "Authorization: Bearer ${API_KEY}"
+node scripts/list-keywords.js YOUR_API_KEY
 ```
 
 2. Then query mentions with the keyword ID:
 ```bash
-curl -X POST "https://app.octolens.com/api/v1/mentions" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "limit": 20,
-    "filters": {
-      "keyword": [1]
-    }
-  }'
+node scripts/query-mentions.js YOUR_API_KEY '{"keyword": [1]}'
 ```
 
 ## Tips for Agents
 
-- **Parse jq if available**: Use `jq` to parse JSON responses for cleaner output
+- **Use bundled scripts**: The Node.js scripts handle JSON parsing automatically
 - **Cache keywords**: After fetching keywords once, remember them for the session
 - **Explain filters**: When using complex filters, explain the logic to the user
 - **Show examples**: When users are unsure, show example filter structures
