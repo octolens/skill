@@ -6,7 +6,7 @@ metadata:
   author: octolens
   version: "1.0"
 compatibility: Requires curl and jq for scripts, and access to the internet
-allowed-tools: Bash(curl:*) Bash(jq:*) Read
+allowed-tools: Bash(curl) Bash(jq) Read
 ---
 
 # Octolens API Skill
