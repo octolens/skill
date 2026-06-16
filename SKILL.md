@@ -1,420 +1,166 @@
 ---
 name: octolens
-description: Query and analyze brand mentions from Octolens API. Use when the user wants to fetch mentions, track keywords, filter by source platforms (Twitter, Reddit, GitHub, LinkedIn, etc.), sentiment analysis, or analyze social media engagement. Supports complex filtering with AND/OR logic, date ranges, follower counts, and bookmarks.
+description: Query and manage Octolens social-listening data — brand mentions, keywords, feeds, analytics, and notifications across Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, news, podcasts, and the open web. Use when the user wants to fetch or filter mentions, set up keyword tracking, configure Slack/email/webhook alerts, run sentiment/volume/source analytics, or otherwise interact with their Octolens workspace. Prefer the Octolens MCP server when available; otherwise use the REST API v2.
 license: MIT
 metadata:
   author: octolens
-  version: "1.0"
-compatibility: Requires Node.js 18+ (for fetch API) and access to the internet
-allowed-tools: Node Read
+  version: "2.0"
+compatibility: Requires an Octolens account on a plan with API access (Pro, Scale, or Enterprise). MCP path needs an MCP-capable agent; REST path needs internet access.
 ---
 
-# Octolens API Skill
+# Octolens
 
-## When to use this skill
+Octolens is a social-listening platform. A workspace tracks **keywords** (phrases like a brand, competitor, or product). A pipeline collects matching posts — **mentions** — from Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, Stack Overflow, dev.to, news, podcasts, and the open web. Every mention is AI-scored for relevance, classified for sentiment, and given topic **tags**. Users save filter presets as **feeds**, which can drive Slack / email / webhook notifications.
 
-Use this skill when the user needs to:
-- Fetch brand mentions from social media and other platforms
-- Filter mentions by source (Twitter, Reddit, GitHub, LinkedIn, YouTube, HackerNews, DevTO, StackOverflow, Bluesky, newsletters, podcasts)
-- Analyze sentiment (positive, neutral, negative)
-- Filter by author follower count or engagement
-- Search for specific keywords or tags
-- Query mentions by date range
-- List available keywords or saved views
-- Apply complex filtering logic with AND/OR conditions
+There are two ways to work with Octolens. **Prefer the MCP server** — it is self-documenting, handles auth once, and exposes purpose-built tools. Fall back to the **REST API v2** for scripting, bulk export, or environments without MCP.
 
-## API Authentication
+## Decision: MCP or REST?
 
-The Octolens API requires a Bearer token for authentication. The user should provide their API key, which you'll use in the `Authorization` header:
+- **MCP** — interactive agent work, ad-hoc questions, configuring keywords/feeds/alerts. Tools carry their own descriptions; you don't need this skill's endpoint catalog. → [Set up MCP](#option-a-mcp-preferred)
+- **REST v2** — shell scripts, CI jobs, CSV/JSON export, or any agent without MCP. → [REST API v2](#option-b-rest-api-v2)
 
+If the Octolens MCP tools are already connected (tool names start with `octolens` / `Octolens`), just use them — skip setup.
+
+---
+
+## Option A: MCP (preferred)
+
+Install the Octolens MCP server (HTTP transport). For Claude Code:
+
+```bash
+claude mcp add --transport http octolens "https://app.octolens.com/api/mcp/v2"
 ```
-Authorization: Bearer YOUR_API_KEY
+
+On first use the server runs an OAuth flow in the browser — the user signs in to Octolens to authorize. No API key to manage. Other MCP clients (Cursor, Claude Desktop, etc.) take the same URL: `https://app.octolens.com/api/mcp/v2`.
+
+Once connected, the server sends its own instructions and every tool is self-described. Typical tools: `list_mentions`, `get_mention`, `list_keywords` / `add_keyword` / `update_keyword` / `pause_keyword` / `delete_keyword`, `list_feeds` / `create_feed` / `update_feed`, `list_tags`, `get_workspace`, `get_usage`, `analytics`, `search_slack_channels`, `list_keyword_suggestions`. Read the tool descriptions — do not guess parameters.
+
+**MCP gotchas**
+
+- Write tools (`add_*`, `update_*`, `create_*`, `delete_*`, `pause_*`, `accept_*`, `reject_*`) mutate the live workspace. Gather every value from the user — never invent emails, URLs, Slack channels, frequencies, or exclude lists.
+- To filter mentions by keyword you need numeric keyword **IDs** — resolve a name with `find_keyword` / `list_keywords` first.
+- To wire a Slack alert: `search_slack_channels` (get channel IDs) → `create_feed` with a SLACK destination.
+
+---
+
+## Option B: REST API v2
+
+Use this when MCP isn't available or you're scripting.
+
+**Base URL:** `https://app.octolens.com/api/v2`
+**Interactive docs:** `https://app.octolens.com/api/v2/docs` · **OpenAPI:** `https://app.octolens.com/api/v2/openapi.json`
+
+### Authentication
+
+Bearer token using an Octolens **API key** (created in the app under Settings → API; format `ak_...`). API keys are org-scoped and carry a scope:
+
+| Scope | Grants |
+|-------|--------|
+| `read` (default) | All GET endpoints + read-style POSTs (list/export/analytics) |
+| `write` | `read` + create/update/delete of keywords, feeds, feedback, mentions |
+| `admin` | `write` + member management |
+
+```bash
+curl "https://app.octolens.com/api/v2/keywords" \
+  -H "Authorization: Bearer $OCTOLENS_API_KEY"
 ```
 
-**Important**: Always ask the user for their API key before making any API calls. Store it in a variable for subsequent requests.
+**Always ask the user for their API key** before making calls; store it in an env var. Session/cookie auth is not supported on v2 — API key only.
 
-## Base URL
+### Conventions
 
-All API endpoints use the base URL: `https://app.octolens.com/api/v1`
+- **Envelope:** successful reads return `{ "data": [...] }`; list endpoints add `{ "pagination": { "nextCursor": <string|null> } }`. Writes return the affected object or `{ "ok": true }` / `{ "success": true }`.
+- **Pagination:** omit `cursor` for page one; pass the response's `pagination.nextCursor` back unchanged. `null` means no more pages.
+- **Rate limit:** 500 requests/hour per org. Watch `X-RateLimit-Remaining` / `X-RateLimit-Reset`; on 429 honor `Retry-After`.
+- **Errors:** non-2xx returns `{ "error": { "code", "message", "status", "details?" } }`. Codes include `UNAUTHORIZED` (401), `FORBIDDEN` (403, wrong scope / no API plan), `VALIDATION_ERROR` (400, with a `details` array), `*_NOT_FOUND` (404), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500).
 
-## Rate Limits
+### Most-used endpoints
 
-- **Limit**: 500 requests per hour
-- **Check headers**: `X-RateLimit-*` headers indicate current usage
+| Method & path | Purpose |
+|---|---|
+| `POST /mentions` | List/filter mentions (read; filters in body) |
+| `POST /mentions/export` | Export up to 50k mentions as `json` or `csv` |
+| `GET /mentions/{sourceId}` | Fetch one mention |
+| `GET /mentions/by-author` | Mentions from one author (`?source=&handle=`) |
+| `GET /keywords` · `POST /keywords` · `PATCH /keywords/{id}` · `DELETE /keywords/{id}` · `POST /keywords/{id}/pause` | Manage tracked keywords |
+| `GET /tags` | Valid tag values for filtering |
+| `GET /feeds` · `POST /feeds` · `GET/PATCH/DELETE /feeds/{id}` | Saved filters + notification destinations |
+| `GET /analytics/volume` · `/sentiment` · `/sources` · `/keywords` | Aggregations (query-param filters) |
+| `GET /org` · `/org/usage` · `/org/company` | Workspace info, quota, company profile |
+| `POST /ai/filter-wizard` | Natural language → filter object |
 
-## Available Endpoints
+Full request/response shapes for **every** endpoint are in **[references/REST-API.md](references/REST-API.md)** — read it on demand when you need a less-common endpoint or an exact field list.
 
-### 1. POST /mentions
+### Listing mentions
 
-Fetch mentions matching keywords with optional filtering. Returns posts sorted by timestamp (newest first).
+`POST /api/v2/mentions` with a JSON body:
 
-**Key Parameters:**
-- `limit` (number, 1-100): Maximum results to return (default: 20)
-- `cursor` (string): Pagination cursor from previous response
-- `includeAll` (boolean): Include low-relevance posts (default: false)
-- `view` (number): View ID to use for filtering
-- `filters` (object): Filter criteria (see filtering section)
+```json
+{ "limit": 20, "filters": { "source": ["twitter"], "sentiment": ["positive"] } }
+```
 
-**Example Response:**
+```bash
+curl -X POST "https://app.octolens.com/api/v2/mentions" \
+  -H "Authorization: Bearer $OCTOLENS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20,"filters":{"source":["reddit","github"],"!tag":["promotional_post"]}}'
+```
+
+Response: `{ "data": [Mention, ...], "pagination": { "nextCursor": "..." } }`. A `Mention` has `id` (numeric postId), `sourceId`, `url`, `title`, `body`, `source`, `timestamp`, `author`, `authorFollowers`, `relevance` (`relevant`/`not_relevant`), `sentiment` (`Positive`/`Neutral`/`Negative`/`null`), `language`, `tags[]`, `keywords[]` (`{id, keyword}`), `engaged`.
+
+Other body fields: `view` (feed ID to reuse its saved filters — merges with inline `filters`), `includeAll` (default `false`; `true` also returns low-relevance posts), `cursor`.
+
+## Mention filters
+
+The `filters` object accepts two interchangeable shapes (identical to v1, so old filter bodies still work).
+
+**Simple (flat map, AND-combined).** Prefix any array field with `!` to negate (NOT IN). Unknown keys are rejected with a 400.
+
+| Field | Type | Values |
+|-------|------|--------|
+| `source` | string[] | `reddit`, `twitter`, `linkedin`, `youtube`, `tiktok`, `bluesky`, `hackernews`, `github`, `stackoverflow`, `dev`, `news`, `newsletter`, `podcasts`, `firehose` (open web), `producthunt`, `medium` |
+| `sentiment` | string[] | `positive`, `neutral`, `negative` (lowercase in filters; returned Title-case) |
+| `keyword` | number[] | Keyword **IDs** only (get from `GET /keywords`). Names are invalid. |
+| `language` | string[] | ISO 639-1: `en`, `es`, `fr`, `de`, `pt`, `it`, `nl`, `ja`, `ko`, `zh` |
+| `tag` | string[] | AI tag names (discover via `GET /tags`) |
+| `relevance` | number[] | `0` high, `1` medium, `2` low |
+| `minXFollowers` / `maxXFollowers` | number | Author X/Twitter follower bounds |
+| `startDate` / `endDate` | string | ISO 8601, e.g. `2026-01-15T00:00:00Z` |
+
+```json
+{ "source": ["twitter"], "sentiment": ["positive"], "minXFollowers": 1000, "!keyword": [5, 6] }
+```
+
+**Advanced (AND/OR groups).** Top-level `operator` joins `groups`; each group's `operator` joins its `conditions`. Each condition is a one-key object (same field names as above). Date/follower bounds may also sit at the top level.
+
 ```json
 {
-  "data": [
-    {
-      "id": "abc123",
-      "url": "https://twitter.com/user/status/123",
-      "body": "Just discovered @YourProduct - this is exactly what I needed!",
-      "source": "twitter",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "author": "user123",
-      "authorName": "John Doe",
-      "authorFollowers": 5420,
-      "relevance": "relevant",
-      "sentiment": "positive",
-      "language": "en",
-      "tags": ["feature-request"],
-      "keywords": [{ "id": 1, "keyword": "YourProduct" }],
-      "bookmarked": false,
-      "engaged": false
-    }
+  "operator": "AND",
+  "groups": [
+    { "operator": "OR",  "conditions": [ { "source": ["twitter"] }, { "source": ["linkedin"] } ] },
+    { "operator": "AND", "conditions": [ { "sentiment": ["positive"] }, { "!tag": ["promotional_post"] } ] }
   ],
-  "cursor": "eyJsYXN0SWQiOiAiYWJjMTIzIn0="
+  "startDate": "2026-01-20T00:00:00Z"
 }
 ```
 
-### 2. GET /keywords
+To build a filter from plain English, POST the request to `/api/v2/ai/filter-wizard` (`{ "query": "negative tweets about pricing, last 7 days" }`) and reuse the returned object.
 
-List all keywords configured for the organization.
+## Gotchas
 
-**Example Response:**
-```json
-{
-  "data": [
-    {
-      "id": 1,
-      "keyword": "YourProduct",
-      "platforms": ["twitter", "reddit", "github"],
-      "color": "#6366f1",
-      "paused": false,
-      "context": "Our main product name"
-    }
-  ]
-}
-```
+- **`bookmarked` and `engaged` are not filter fields on v2** — they existed in v1 docs but were removed. Filters are `.strict()`: any unknown or stale key returns a 400, not a silent ignore. Don't carry them over.
+- **`keyword` filter is ID-only.** A keyword *name* (even a valid one) returns a 400. Always resolve names via `GET /keywords` first.
+- **Mention timestamps are Tinybird-style**: `YYYY-MM-DD HH:mm:ss.SSS` (UTC, no `Z`). When mutating a mention or posting feedback, copy the `timestamp` from the list response verbatim — it's part of the lookup key alongside `sourceId`/`postId`.
+- **Sentiment case differs by direction**: filter with lowercase (`"positive"`), but mentions return Title-case (`"Positive"`).
+- **Scope errors are 403, not 401.** A valid read-only key calling a write endpoint gets `FORBIDDEN` — mint a `write` key.
+- **`platforms` on a keyword** is returned as a string array but several other places (and the create body) accept comma strings — check `references/REST-API.md` for the exact shape per endpoint.
+- This skill ships **no scripts** — call the API directly with `curl` / `fetch`, or use MCP.
 
-### 3. GET /views
+## Workflow
 
-List all saved views (pre-configured filters).
-
-**Example Response:**
-```json
-{
-  "data": [
-    {
-      "id": 1,
-      "name": "High Priority",
-      "icon": "star",
-      "filters": {
-        "sentiment": ["positive", "negative"],
-        "source": ["twitter"]
-      },
-      "createdAt": "2024-01-01T00:00:00Z"
-    }
-  ]
-}
-```
-
-## Filtering Mentions
-
-The `/mentions` endpoint supports powerful filtering with two modes:
-
-### Simple Mode (Implicit AND)
-
-Put fields directly in filters. All conditions are ANDed together.
-
-```json
-{
-  "filters": {
-    "source": ["twitter", "linkedin"],
-    "sentiment": ["positive"],
-    "minXFollowers": 1000
-  }
-}
-```
-→ `source IN (twitter, linkedin) AND sentiment = positive AND followers ≥ 1000`
-
-### Exclusions
-
-Prefix any array field with ! to exclude values:
-
-```json
-{
-  "filters": {
-    "source": ["twitter"],
-    "!keyword": [5, 6]
-  }
-}
-```
-→ `source = twitter AND keyword NOT IN (5, 6)`
-
-### Advanced Mode (AND/OR Groups)
-
-Use `operator` and `groups` for complex logic:
-
-```json
-{
-  "filters": {
-    "operator": "AND",
-    "groups": [
-      {
-        "operator": "OR",
-        "conditions": [
-          { "source": ["twitter"] },
-          { "source": ["linkedin"] }
-        ]
-      },
-      {
-        "operator": "AND",
-        "conditions": [
-          { "sentiment": ["positive"] },
-          { "!tag": ["spam"] }
-        ]
-      }
-    ]
-  }
-}
-```
-→ `(source = twitter OR source = linkedin) AND (sentiment = positive AND tag ≠ spam)`
-
-### Available Filter Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `source` | string[] | Platforms: twitter, reddit, github, linkedin, youtube, hackernews, devto, stackoverflow, bluesky, newsletter, podcast |
-| `sentiment` | string[] | Values: positive, neutral, negative |
-| `keyword` | string[] | Keyword IDs (get from /keywords endpoint) |
-| `language` | string[] | ISO 639-1 codes: en, es, fr, de, pt, it, nl, ja, ko, zh |
-| `tag` | string[] | Tag names |
-| `bookmarked` | boolean | Filter bookmarked (true) or non-bookmarked (false) posts |
-| `engaged` | boolean | Filter engaged (true) or non-engaged (false) posts |
-| `minXFollowers` | number | Minimum Twitter follower count |
-| `maxXFollowers` | number | Maximum Twitter follower count |
-| `startDate` | string | ISO 8601 format (e.g., "2024-01-15T00:00:00Z") |
-| `endDate` | string | ISO 8601 format |
-
-## Using the Bundled Scripts
-
-This skill includes helper scripts for common operations. Use them to quickly interact with the API:
-
-### Fetch Mentions
-```bash
-node scripts/fetch-mentions.js YOUR_API_KEY [limit] [includeAll]
-```
-
-### List Keywords
-```bash
-node scripts/list-keywords.js YOUR_API_KEY
-```
-
-### List Views
-```bash
-node scripts/list-views.js YOUR_API_KEY
-```
-
-### Custom Filter Query
-```bash
-node scripts/query-mentions.js YOUR_API_KEY '{"source": ["twitter"], "sentiment": ["positive"]}' [limit]
-```
-
-### Advanced Query
-```bash
-node scripts/advanced-query.js YOUR_API_KEY [limit]
-```
-
-## Best Practices
-
-1. **Always ask for the API key** before making requests
-2. **Use views** when possible to leverage pre-configured filters
-3. **Start with simple filters** and add complexity as needed
-4. **Check rate limits** in response headers (`X-RateLimit-*`)
-5. **Use pagination** with cursor for large result sets
-6. **Dates must be ISO 8601** format (e.g., "2024-01-15T00:00:00Z")
-7. **Get keyword IDs** from `/keywords` endpoint before filtering by keyword
-8. **Use exclusions** (!) to filter out unwanted content
-9. **Combine includeAll=false** with relevance filtering for quality results
-
-## Common Use Cases
-
-### Find positive Twitter mentions with high followers
-```json
-{
-  "limit": 20,
-  "filters": {
-    "source": ["twitter"],
-    "sentiment": ["positive"],
-    "minXFollowers": 1000
-  }
-}
-```
-
-### Exclude spam and get Reddit + GitHub mentions
-```json
-{
-  "limit": 50,
-  "filters": {
-    "source": ["reddit", "github"],
-    "!tag": ["spam", "irrelevant"]
-  }
-}
-```
-
-### Complex query: (Twitter OR LinkedIn) AND positive sentiment, last 7 days
-```json
-{
-  "limit": 30,
-  "filters": {
-    "operator": "AND",
-    "groups": [
-      {
-        "operator": "OR",
-        "conditions": [
-          { "source": ["twitter"] },
-          { "source": ["linkedin"] }
-        ]
-      },
-      {
-        "operator": "AND",
-        "conditions": [
-          { "sentiment": ["positive"] },
-          { "startDate": "2024-01-20T00:00:00Z" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-## Error Handling
-
-| Status | Error | Description |
-|--------|-------|-------------|
-| 401 | unauthorized | Missing or invalid API key |
-| 403 | forbidden | Valid key but no permission |
-| 404 | not_found | Resource (e.g., view ID) not found |
-| 429 | rate_limit_exceeded | Too many requests |
-| 400 | invalid_request | Malformed request body |
-| 500 | internal_error | Server error, retry later |
-
-## Step-by-Step Workflow
-
-When a user asks to query Octolens data:
-
-1. **Ask for API key** if not already provided
-2. **Understand the request**: What are they looking for?
-3. **Determine filters needed**: Source, sentiment, date range, etc.
-4. **Check if a view applies**: List views first if user mentions saved filters
-5. **Build the query**: Use simple mode first, advanced mode for complex logic
-6. **Execute the request**: Use bundled Node.js scripts or fetch API directly
-7. **Parse results**: Extract key information (author, body, sentiment, source)
-8. **Handle pagination**: If more results needed, use cursor from response
-9. **Present findings**: Summarize insights, highlight patterns
-
-## Examples
-
-### Example 1: Simple Query
-**User**: "Show me positive mentions from Twitter in the last 7 days"
-
-**Action** (using bundled script):
-```bash
-node scripts/query-mentions.js YOUR_API_KEY '{"source": ["twitter"], "sentiment": ["positive"], "startDate": "2024-01-20T00:00:00Z"}'
-```
-
-**Alternative** (using fetch API directly):
-```javascript
-const response = await fetch('https://app.octolens.com/api/v1/mentions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    limit: 20,
-    filters: {
-      source: ['twitter'],
-      sentiment: ['positive'],
-      startDate: '2024-01-20T00:00:00Z',
-    },
-  }),
-});
-const data = await response.json();
-```
-
-### Example 2: Advanced Query
-**User**: "Find mentions from Reddit or GitHub, exclude spam tag, with positive or neutral sentiment"
-
-**Action** (using bundled script):
-```bash
-node scripts/query-mentions.js YOUR_API_KEY '{"operator": "AND", "groups": [{"operator": "OR", "conditions": [{"source": ["reddit"]}, {"source": ["github"]}]}, {"operator": "OR", "conditions": [{"sentiment": ["positive"]}, {"sentiment": ["neutral"]}]}, {"operator": "AND", "conditions": [{"!tag": ["spam"]}]}]}'
-```
-
-**Alternative** (using fetch API directly):
-```javascript
-const response = await fetch('https://app.octolens.com/api/v1/mentions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    limit: 30,
-    filters: {
-      operator: 'AND',
-      groups: [
-        {
-          operator: 'OR',
-          conditions: [
-            { source: ['reddit'] },
-            { source: ['github'] },
-          ],
-        },
-        {
-          operator: 'OR',
-          conditions: [
-            { sentiment: ['positive'] },
-            { sentiment: ['neutral'] },
-          ],
-        },
-        {
-          operator: 'AND',
-          conditions: [
-            { '!tag': ['spam'] },
-          ],
-        },
-      ],
-    },
-  }),
-});
-const data = await response.json();
-```
-
-### Example 3: Get Keywords First
-**User**: "Show mentions for our main product keyword"
-
-**Actions**:
-1. First, list keywords:
-```bash
-node scripts/list-keywords.js YOUR_API_KEY
-```
-
-2. Then query mentions with the keyword ID:
-```bash
-node scripts/query-mentions.js YOUR_API_KEY '{"keyword": [1]}'
-```
-
-## Tips for Agents
-
-- **Use bundled scripts**: The Node.js scripts handle JSON parsing automatically
-- **Cache keywords**: After fetching keywords once, remember them for the session
-- **Explain filters**: When using complex filters, explain the logic to the user
-- **Show examples**: When users are unsure, show example filter structures
-- **Paginate wisely**: Ask if user wants more results before fetching next page
-- **Summarize insights**: Don't just dump data, provide analysis (sentiment trends, top authors, platform distribution)
+1. Decide MCP vs REST (above). If MCP tools are connected, use them.
+2. For REST: confirm the API key; export it as `$OCTOLENS_API_KEY`.
+3. If filtering by keyword, list keywords first to get IDs.
+4. Build the smallest filter that answers the question; prefer simple mode, drop to advanced only for cross-field OR logic. Or use the filter wizard.
+5. Execute; paginate with `nextCursor` only if the user needs more than one page.
+6. Summarize insights (sentiment split, top sources/authors, trends) — don't just dump rows.

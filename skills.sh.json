@@ -1,0 +1,13 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Octolens",
+      "description": "Query and manage Octolens social-listening data — mentions, keywords, feeds, analytics, and alerts.",
+      "skills": [
+        "octolens"
+      ]
+    }
+  ]
+}
