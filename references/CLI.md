@@ -76,7 +76,7 @@ Accepted by every command.
 | `--timeout <seconds>` | integer | Per-request deadline (default 30s). See "Retries and timeouts". |
 | `--verbose` | boolean | Diagnostics on stderr: one line per REST request (method, path, status, duration) plus retry/backoff events. |
 | `--base-url <url>` | string | Override the app base URL. Feeds the REST base, `--web` pages and OAuth handoffs alike. |
-| `--web` | boolean | Open this resource's page in the web app instead of running the command. Always prints the URL; only a TTY spawns a browser. Commands with no page (e.g. `version`, the auth commands) exit `2` with `NO_WEB_PAGE`. |
+| `--web` | boolean | Open this resource's page in the web app instead of running the command. Always prints the URL; a browser spawns only on a TTY without `--json`. Commands with no page (e.g. `version`, the auth commands) exit `2` with `NO_WEB_PAGE`. |
 | `--transport rest` | enum | Forces the public REST v2 backend — the only transport the CLI has, so you never need to pass it. |
 
 ---
@@ -322,7 +322,7 @@ relevance prompt. An update with no fields exits `2` (`NOTHING_TO_UPDATE`).
   Flags: `--ai <v>` · `--filter-json <v>` · `--icon <v>` · `--keyword <v>` · `--name <v>` · `--sentiment <v>` · `--source <v>` · `--yes`
   Exits: 0, 1, 2, 8
 - **`octolens feeds watch`** — Live-watch your feed with keyboard triage (polling live view)
-  Flags: `--backlog <all|none>` · `--feed <n>` · `--interval <v>` · `--keyword <v>` · `--relevance <relevant|all>` · `--sentiment <v>` · `--source <v>` · `--watch`
+  Flags: `--backlog <all|none>` · `--feed <n>` · `--interval <v>` · `--keyword <v>` · `--relevance <relevant|all>` · `--sentiment <v>` · `--source <v>`
   Exits: 0, 1, 2
 
 Three ways to express a feed's filter, mutually exclusive: the ergonomic flags
