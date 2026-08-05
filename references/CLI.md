@@ -1,16 +1,16 @@
 # Octolens CLI — full command and contract reference
 
 Read this when you need an exact flag name, the meaning of an exit code, or the
-retry/timeout semantics. The routing decision (MCP vs CLI vs REST) and the
-short version of the CLI contract live in `SKILL.md`; this file is the complete
-catalog.
+retry/timeout semantics. The routing decision (CLI vs REST) and the short version
+of the CLI contract live in `SKILL.md`; this file is the complete catalog.
 
 - **Package:** `octolens` on npm · **Binary:** `octolens` · **Node:** ≥ 20
 - **Backend:** the public REST API v2 at `https://app.octolens.com` (the CLI is a
   client of the same API documented in `references/REST-API.md` — same plans,
   same scopes, same rate limit)
-- **Generated from:** the `octolens@0.1.0` contract manifest (75 commands,
-  11 exit codes, 91 error codes)
+- **Derived from:** the `octolens@0.1.0` contract manifest — 75 commands
+  (62 visible, the rest alias spellings), 11 exit codes, and 104 error codes of
+  which 91 can reach this build
 
 ---
 
@@ -219,12 +219,14 @@ Defined once, applied by every list command.
   `2` (`INVALID_LIMIT` / `USAGE_ERROR`).
 - **Cursor-paginated lists** — `mentions list`, `mentions by-author`,
   `suggestions list` (org-wide), `slack channels`: `--limit N` returns the first
-  N items across as few pages as possible, `--all` drains every page, neither
-  flag returns one server page (20 items).
+  N items across as few pages as possible and `--all` drains every page.
+  **Passing neither returns one server page — 20 items** — so always pass one of
+  them when you need a known quantity.
 - **Bounded lists** — `keywords list`, `feeds list`, `tags list`, `members list`,
-  `notifications list`, `suggestions list --keyword <kw>`: the full collection
-  comes back in one response and `nextCursor` is always `null`. There the flags
-  are a client-side head of that complete result.
+  `members invitations`, `notifications list`, `suggestions list --keyword <kw>`:
+  the full collection comes back in one response and `nextCursor` is always
+  `null`. There the flags are a client-side head of that complete result, and
+  passing neither returns everything.
 - `nextCursor` is a **signal, not an input** — there is no `--cursor` flag. Re-run
   with a larger `--limit`, or use `--all`.
 
@@ -352,7 +354,7 @@ failure: branch on the exit code.
   Flags: `--list <v>`
   Exits: 0, 1, 2
 - **`octolens filters remove <LIST> [VALUE…]`** — Remove value(s) from a global filter list
-  Flags: `--force` · `--yes`^
+  Flags: `--force` · `--yes`
   Exits: 0, 1, 2, 8
 - **`octolens filters set <LIST> [VALUE…]`** — Replace a global filter list wholesale (no values + `--clear` = empty it)
   Flags: `--clear` · `--values-json <v>`
@@ -490,7 +492,8 @@ explicit form in scripts.
 `mentions update --relevance` accepts `relevant`, `not_relevant`, `high`,
 `medium`, `low`, `clear`; `--sentiment` accepts `Positive`, `Neutral`, `Negative`.
 
-`mentions export` writes to stdout unless `-o/--output` names a file. The format
+`mentions export` tops out at the API's 50,000-row export ceiling. It writes to
+stdout unless `-o/--output` names a file. The format
 follows the extension (`.csv`/`.json`; anything else is csv; `.jsonl`/`.ndjson`
 are refused), or `--format`. `mentions export -o out.csv --json` writes a **csv
 file** and emits one advisory object on stderr saying so — `--json` shapes stdout,
@@ -597,7 +600,7 @@ delivery did not.
 
 ## Error codes
 
-91 codes, grouped by the exit code they map to. **Branch on the exit code first**,
+The 91 codes this build can emit, grouped by the exit code they map to. **Branch on the exit code first**,
 then read `error.code` for the remedy — the exit map is frozen, individual codes
 may be added.
 

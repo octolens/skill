@@ -1,54 +1,33 @@
 ---
 name: octolens
-description: Query and manage Octolens social-listening data — brand mentions, keywords, feeds, analytics, and notifications across Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, news, podcasts, and the open web. Use when the user wants to fetch or filter mentions, set up keyword tracking, configure Slack/email/webhook alerts, run sentiment/volume/source analytics, or otherwise interact with their Octolens workspace. Three access paths: the Octolens MCP server for interactive agent work, the `octolens` CLI for shell scripts, CI jobs and bulk export (stable exit codes, pure `--json`, automatic retries), and the REST API v2 for raw programmatic access.
+description: Query and manage Octolens social-listening data — brand mentions, keywords, feeds, analytics, and notifications across Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, news, podcasts, and the open web. Use when the user wants to fetch or filter mentions, set up keyword tracking, configure Slack/email/webhook alerts, run sentiment/volume/source analytics, or otherwise interact with their Octolens workspace. Two access paths are covered here: the `octolens` CLI for shell scripts, CI jobs, terminal work and bulk export (stable exit codes, pure `--json`, automatic retries), and the REST API v2 for raw programmatic access, non-Node environments, and anything the CLI does not cover.
 license: MIT
 metadata:
   author: octolens
   version: "3.0"
-compatibility: Requires an Octolens account on a plan with API access (Pro, Scale, or Enterprise). MCP path needs an MCP-capable agent; CLI path needs Node.js 20+ and a shell; REST path needs internet access.
+compatibility: Requires an Octolens account on a plan with API access (Pro, Scale, or Enterprise). The CLI path needs Node.js 20+ and a shell; the REST path needs internet access.
 ---
 
 # Octolens
 
 Octolens is a social-listening platform. A workspace tracks **keywords** (phrases like a brand, competitor, or product). A pipeline collects matching posts — **mentions** — from Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, Stack Overflow, dev.to, news, podcasts, and the open web. Every mention is AI-scored for relevance, classified for sentiment, and given topic **tags**. Users save filter presets as **feeds**, which can drive Slack / email / webhook notifications.
 
-There are three ways to work with Octolens, and the right one depends on where you are running.
+This skill covers two ways to work with Octolens, and the right one depends on where you are running.
 
-## Decision: MCP, CLI, or REST?
+## Decision: CLI or REST?
 
 | You are… | Use | Why |
 |---|---|---|
-| An agent answering questions or configuring keywords/feeds/alerts interactively | **MCP** | Self-documenting tools, OAuth once, no key to manage → [Option A](#option-a-mcp-interactive-agent-work) |
-| Writing a shell script, a CI job, a cron, or exporting in bulk — anything where you branch on the result | **CLI** | Stable exit codes, pure `--json`, automatic `Retry-After` retries, name→id resolution → [Option B](#option-b-cli-scripts-ci-and-the-terminal) |
-| Calling from application code, a non-Node runtime, or a box where you cannot install a binary | **REST v2** | Raw HTTP, no dependencies → [Option C](#option-c-rest-api-v2) |
+| Writing a shell script, a CI job, a cron, or working in a terminal — anything where you branch on the result, plus bulk export | **CLI** | Stable exit codes, pure `--json`, automatic `Retry-After` retries, name→id resolution → [Option A](#option-a-cli-scripts-ci-and-the-terminal) |
+| Calling from application code, a non-Node runtime, a box where you cannot install a binary, or reaching for something the CLI does not cover | **REST v2** | Raw HTTP, no dependencies, the full endpoint surface → [Option B](#option-b-rest-api-v2) |
 
-If the Octolens MCP tools are already connected (tool names start with `octolens` / `Octolens`), just use them — skip setup.
+**Prefer the CLI when you are in a shell.** It is a client of this same REST API, but it carries guarantees the raw endpoints do not: a frozen exit-code map you can branch on, one JSON document on stdout with the error envelope on stderr, automatic 429 retry honouring `Retry-After`, a per-request `--timeout`, response-shape validation, and a distinct `RESPONSE_LOST` code (exit `10`) that tells you a write may have landed so you verify instead of duplicating it. Reach for REST when you cannot install Node 20+, when you are calling from application code rather than a shell, or when you need an endpoint the CLI does not expose.
 
-**For scripting, reach for the CLI before raw REST.** It is a client of this same REST API, but it carries guarantees the raw endpoints do not: a frozen exit-code map you can branch on, one JSON document on stdout with the error envelope on stderr, automatic 429 retry honouring `Retry-After`, a per-request `--timeout`, response-shape validation, and a distinct `RESPONSE_LOST` code (exit `10`) that tells you a write may have landed so you verify instead of duplicating it. Drop to REST when you cannot install Node 20+, or when you are calling from application code rather than a shell.
-
----
-
-## Option A: MCP (interactive agent work)
-
-Install the Octolens MCP server (HTTP transport). For Claude Code:
-
-```bash
-claude mcp add --transport http octolens "https://app.octolens.com/api/mcp/v2"
-```
-
-On first use the server runs an OAuth flow in the browser — the user signs in to Octolens to authorize. No API key to manage. Other MCP clients (Cursor, Claude Desktop, etc.) take the same URL: `https://app.octolens.com/api/mcp/v2`.
-
-Once connected, the server sends its own instructions and every tool is self-described. Typical tools: `list_mentions`, `get_mention`, `list_keywords` / `add_keyword` / `update_keyword` / `pause_keyword` / `delete_keyword`, `list_feeds` / `create_feed` / `update_feed`, `list_tags`, `get_workspace`, `get_usage`, `analytics`, `search_slack_channels`, `list_keyword_suggestions`. Read the tool descriptions — do not guess parameters.
-
-**MCP gotchas**
-
-- Write tools (`add_*`, `update_*`, `create_*`, `delete_*`, `pause_*`, `accept_*`, `reject_*`) mutate the live workspace. Gather every value from the user — never invent emails, URLs, Slack channels, frequencies, or exclude lists.
-- To filter mentions by keyword you need numeric keyword **IDs** — resolve a name with `find_keyword` / `list_keywords` first.
-- To wire a Slack alert: `search_slack_channels` (get channel IDs) → `create_feed` with a SLACK destination.
+Octolens also offers an MCP server, whose tools carry their own descriptions — docs: <https://octolens.com/docs/mcp/v2/overview>.
 
 ---
 
-## Option B: CLI (scripts, CI, and the terminal)
+## Option A: CLI (scripts, CI, and the terminal)
 
 The `octolens` CLI is the terminal interface to the same workspace. Use it for shell scripts, CI jobs, cron, bulk export, and any automation that branches on whether an operation succeeded.
 
@@ -115,14 +94,14 @@ Every command, flag, exit code and error code is in **[references/CLI.md](refere
 **CLI gotchas**
 
 - Destructive commands (`keywords rm`, `feeds rm`, `notifications rm`, `members rm`, `feedback rm`) require `--yes` headless, otherwise exit `2`.
-- `--limit` and `--all` are mutually exclusive on every list command (exit `2`, before any network call).
+- `--limit` and `--all` are mutually exclusive on every list command (exit `2`, before any network call). On cursor-paginated lists (`mentions list`, `mentions by-author`, `slack channels`, org-wide `suggestions list`) passing **neither** returns just the first server page of 20 — pass `--limit N` or `--all` when you need a known quantity.
 - `mentions engage` without `--engaged true|false` **toggles** — always pass the explicit value in automation.
 - `analytics`/`dashboard` need `--since` and `--until` together; `mentions` accepts either alone.
 - A read-scoped key hitting a write command exits `5`, not `3` — mint a `write` key rather than logging in again.
 
 ---
 
-## Option C: REST API v2
+## Option B: REST API v2
 
 Use this for raw programmatic access — application code, non-Node runtimes, or a box where you cannot install a binary.
 
@@ -233,13 +212,13 @@ To build a filter from plain English, POST the request to `/api/v2/ai/filter-wiz
 - **Sentiment case differs by direction**: filter with lowercase (`"positive"`), but mentions return Title-case (`"Positive"`).
 - **Scope errors are 403, not 401.** A valid read-only key calling a write endpoint gets `FORBIDDEN` — mint a `write` key.
 - **`platforms` on a keyword** is returned as a string array but several other places (and the create body) accept comma strings — check `references/REST-API.md` for the exact shape per endpoint.
-- This skill ships **no scripts** — use MCP, the `octolens` CLI, or call the API directly with `curl` / `fetch`.
+- This skill ships **no scripts** — use the `octolens` CLI, or call the API directly with `curl` / `fetch`.
 
 ## Workflow
 
-1. Pick a path (above): MCP if its tools are connected, the CLI if you're in a shell or a CI job, REST otherwise.
-2. Confirm the credential: MCP does OAuth on first use; CLI and REST both need an API key in `$OCTOLENS_API_KEY` (CLI alternative: `octolens login`). Verify with `octolens whoami` on the CLI path.
-3. If filtering by keyword on REST, list keywords first to get IDs. The CLI and MCP resolve names for you.
+1. Pick a path (above): the CLI if you're in a shell or a CI job, REST otherwise.
+2. Confirm the credential: both paths need an API key in `$OCTOLENS_API_KEY` (CLI alternative: `octolens login`). Verify with `octolens whoami` on the CLI path.
+3. If filtering by keyword on REST, list keywords first to get IDs. The CLI resolves names for you.
 4. Build the smallest filter that answers the question; prefer simple mode, drop to advanced only for cross-field OR logic. Or use the filter wizard (`POST /ai/filter-wizard`, or `octolens feeds create --ai "…"`).
 5. Execute; paginate only if the user needs more than one page (REST: `nextCursor`; CLI: `--limit` / `--all`).
 6. In scripts, branch on the CLI's exit code — never on message text — and treat exit `10` as "verify, don't retry".
