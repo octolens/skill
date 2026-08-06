@@ -17,24 +17,34 @@ Or browse it on [skills.sh](https://skills.sh/octolens/skill).
 
 ## Two ways to connect
 
-**MCP (preferred)** — self-documenting tools, OAuth login, no API key to manage:
+**CLI** — for shell scripts, CI jobs, terminal work, and bulk export. Stable exit
+codes, pure `--json` on stdout, automatic `Retry-After` retries:
 
 ```bash
-claude mcp add --transport http octolens "https://app.octolens.com/api/mcp/v2"
+npm install -g octolens          # Node 20+, or `npx octolens <cmd>`
+export OCTOLENS_API_KEY=ak_...   # or: octolens login
+octolens mentions list --source reddit --sentiment negative --json
 ```
 
-**REST API v2** — for scripting, CSV/JSON export, or non-MCP agents. Base URL
-`https://app.octolens.com/api/v2`, Bearer auth with an Octolens API key.
-Interactive docs at `https://app.octolens.com/api/v2/docs`.
+**REST API v2** — for raw programmatic access, non-Node environments, and
+anything the CLI does not cover. Base URL `https://app.octolens.com/api/v2`,
+Bearer auth with an Octolens API key. Interactive docs at
+`https://app.octolens.com/api/v2/docs`.
+
+Octolens also offers an MCP server, whose tools carry their own descriptions —
+docs: <https://octolens.com/docs/mcp/v2/overview>.
 
 ## Files
 
-- [SKILL.md](SKILL.md) — when to use MCP vs REST, auth, mention filtering, gotchas.
+- [SKILL.md](SKILL.md) — CLI vs REST, auth, mention filtering, gotchas.
+- [references/CLI.md](references/CLI.md) — complete command, exit-code, and error-code reference.
 - [references/REST-API.md](references/REST-API.md) — complete endpoint catalog.
 
 ## Requirements
 
 - An Octolens plan with API access (Pro, Scale, or Enterprise).
-- For REST: an API key (Settings → API). For MCP: an MCP-capable agent.
+- For the CLI: Node.js 20+ and an API key (or `octolens login`). For REST: an API
+  key (Settings → API).
 
-No scripts are bundled — call the API directly via `curl`/`fetch`, or use MCP.
+No scripts are bundled — use the `octolens` CLI, or call the API directly via
+`curl`/`fetch`.
