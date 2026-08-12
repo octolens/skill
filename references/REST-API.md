@@ -132,6 +132,29 @@ Returns `{ data: string[] }` — the union of tags this org's mentions carry plu
 
 ---
 
+## On-demand search
+
+One-time AI-scored searches across the workspace's enabled platforms. Results
+belong to the search — they never appear in the mentions feed. **Every**
+successful search-route response carries remaining-quota headers:
+`X-Octolens-Mentions-Remaining` (all plans) and `X-Octolens-Searches-Remaining`
+(plans with a lifetime search cap — the Agents plan: 50 lifetime searches,
+5,000 AI-scored mentions/month). Self-throttle on them instead of slamming
+into the wall.
+
+### `POST /search` — run a search · *read*
+Body: `query` (required), `timeWindow?` (`1d`/`7d`/`30d`, default `7d`), `sources?` (string[]), `maxResults?` (1–500, default 100), `minRelevance?` (`high`/`medium`/`low`), `waitMs?` (block up to 25s).
+Blocks up to `waitMs`; returns **200** `{ status: "completed", searchId, query, mentions: [...], stats }` when it finishes in time, else **202** `{ status: "running", searchId, pollUrl, partialStats }` — poll `GET /search/{searchId}` (a `Retry-After: 2` header paces the loop). New results count against the monthly mention quota (`stats.mentionsConsumed`); results the workspace already collected are flagged `alreadyInWorkspace` and are free.
+At a quota wall: **403 `UPGRADE_REQUIRED`** on the Agents plan — the envelope carries additive `upgradeUrl` and `upgradeCommand` fields (`octolens upgrade` mints a signed-in upgrade link) — or **402 `QUOTA_EXCEEDED`** on other plans (enable flex pricing or upgrade).
+
+### `GET /search/{searchId}` — poll · *read*
+`{ status: "running" | "completed" | "failed" | "quota_exhausted", ... }` — `completed` carries the full `mentions` + `stats`; `quota_exhausted` means the mention quota ran out mid-search (nothing billed for it).
+
+### `GET /search` — list past searches · *read*
+Paginated (`limit?`, `cursor?`): `{ data: [{ searchId, query, status, createdAt, stats? }], pagination: { nextCursor } }`.
+
+---
+
 ## Analytics
 
 All four take the same query-param filters: `startDate?` + `endDate?` (ISO 8601, both-or-neither; default last 30 days; max 365), `keywordIds?` (number | number[]), `platforms?` (string | string[]), `tag?`, `sentiment?` (`POSITIVE`/`NEUTRAL`/`NEGATIVE`), `relevance?` (0/1/2 or array; default `[0,1]`).
@@ -152,7 +175,10 @@ All four take the same query-param filters: `startDate?` + `endDate?` (ISO 8601,
 Body: `name?`, `platforms?` (`"all"` or string[]).
 
 ### `GET /org/usage` — quota · *read*
-`{ plan, mentions: {count, limit, resetAt}, keywords: {count, limit}, flex?: {enabled, budgetCents, used, resetAt} }`.
+`{ plan, mentions: {count, limit, resetAt}, keywords: {count, limit}, flex?: {enabled, budgetCents, used, resetAt}, searches?: {used, limit, remaining} }` — `searches` is present only on the Agents plan (the lifetime on-demand search allowance; it never resets).
+
+### `POST /org/upgrade-link` — authenticated upgrade link · *write*
+`{ url, destination, plan, expiresAt, expiresInSeconds }` — a single-use, short-lived (10 min) Clerk-ticket deep link that opens the upgrade page **already signed in** (works for workspaces that never had a browser session). Plan-aware: Agents → the upgrade page, other plans → the billing page. This is what `octolens upgrade` calls.
 
 ### `GET /org/company` — company profile · *read*
 `{ id, name, domain, website, logo, industry, sector, tags, description, linkedin, twitter, relevanceContext, productUseCases, competitors, companyMoat, relevanceGuidelines, classificationGuidelines }`.
@@ -206,7 +232,10 @@ Query: `q?` (substring on channel name), `cursor?`, `pages?` (1–10, default 2)
 |--------|-------|
 | 400 | `VALIDATION_ERROR` (+`details` array), `KEYWORD_LIMIT_EXCEEDED`, `LAST_ADMIN`, `ITEM_EXISTS`, `INVALID_DOMAIN`, `INVALID_TIMEZONE` |
 | 401 | `UNAUTHORIZED` |
-| 403 | `FORBIDDEN` (missing scope, or plan lacks API access) |
-| 404 | `NOT_FOUND`, `FEED_NOT_FOUND`, `KEYWORD_NOT_FOUND`, `POST_NOT_FOUND`, `SUGGESTION_NOT_FOUND`, `COMPANY_NOT_FOUND`, `ORG_NOT_FOUND`, `SETTINGS_NOT_FOUND` |
+| 402 | `QUOTA_EXCEEDED` (monthly mention quota, non-Agents plans) |
+| 403 | `FORBIDDEN` (missing scope, or plan lacks API access), `UPGRADE_REQUIRED` (Agents-plan cap — envelope adds `upgradeUrl` + `upgradeCommand`) |
+| 404 | `NOT_FOUND`, `FEED_NOT_FOUND`, `KEYWORD_NOT_FOUND`, `POST_NOT_FOUND`, `SEARCH_NOT_FOUND`, `SUGGESTION_NOT_FOUND`, `COMPANY_NOT_FOUND`, `ORG_NOT_FOUND`, `SETTINGS_NOT_FOUND` |
 | 429 | `RATE_LIMITED` (+`Retry-After`) |
 | 500 | `INTERNAL_ERROR` |
+
+Additive per-code envelope fields (`upgradeUrl`/`upgradeCommand` on `UPGRADE_REQUIRED`, `details` on `VALIDATION_ERROR`) ride **inside** `error`, alongside the always-present `code`/`message`/`status`.

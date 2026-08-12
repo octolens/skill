@@ -8,9 +8,9 @@ of the CLI contract live in `SKILL.md`; this file is the complete catalog.
 - **Backend:** the public REST API v2 at `https://app.octolens.com` (the CLI is a
   client of the same API documented in `references/REST-API.md` — same plans,
   same scopes, same rate limit)
-- **Derived from:** the `octolens@0.1.0` contract manifest — 75 commands
-  (62 visible, the rest alias spellings), 11 exit codes, and 104 error codes of
-  which 91 can reach this build
+- **Derived from:** the `octolens@0.1.0` contract manifest — 78 commands
+  (65 visible, the rest alias spellings), 11 exit codes, and 111 error codes of
+  which 98 can reach this build
 
 ---
 
@@ -37,7 +37,27 @@ octolens login                      # --scope read|write|admin (default write)
 octolens login --with-key           # masked paste prompt instead of the browser
 octolens login --with-key ak_...    # non-interactive
 octolens login --no-browser         # print the authorize URL, wait out of band
+
+# No account yet — signup creates the workspace AND authenticates the CLI
+octolens signup                     # browser handoff (same machinery as login)
+octolens signup --headless          # terminal-only: email → emailed code → domain
 ```
+
+Headless signup under `--json` is a resumable two-step (the pending signup
+lives server-side, so a lost terminal never wedges it):
+
+```bash
+octolens signup --headless --email you@corp.com --json
+#   → { "signedUp": false, "signupId": "…", "expiresInSeconds": 600, "next": "…" }
+octolens signup --headless --signup-id 4f2a9c81d6e05b37a1428f6f9c03d5aa --code 123456 --domain corp.com --json
+#   → { "signedUp": true, "workspace": …, … }    # profile saved, key stored
+```
+
+A wrong code answers `INVALID_CODE` (retryable while the server allows
+attempts, then `SIGNUP_ATTEMPTS_EXCEEDED`); an expired/unknown signup answers
+`SIGNUP_NOT_FOUND` — re-run the first step. An already-authenticated CLI is
+refused with `ALREADY_AUTHENTICATED` (exit `2`) in both modes. Signup
+workspaces land on the **Agents plan** (see `search` and `upgrade` below).
 
 Profiles live in `~/.config/octolens/config.json` (override the directory with
 `OCTOLENS_CONFIG_DIR`, or the XDG base with `XDG_CONFIG_HOME`). `octolens switch
@@ -558,6 +578,41 @@ delivery did not.
 
 `--platforms` is repeatable; pass `--platforms all` for every supported platform.
 
+On the **Agents plan**, `org usage --json` additionally carries
+`searches: { used, limit, remaining }` — the lifetime on-demand search
+allowance (it never resets) — and the human view warns when fewer than 10
+searches remain.
+
+#### `search`
+
+- **`octolens search <query>`** — Run a one-time AI-scored search across your enabled platforms
+  Flags: `--days <1|7|30>` · `--source <v>` · `--min-relevance <high|medium|low>` · `--max-results <n>`
+  Exits: 0, 1, 2, 6
+
+```bash
+octolens search "your brand" --days 7 --json
+octolens search "acme corp" --days 30 --source reddit,hackernews --min-relevance high --json
+```
+
+Results belong to the search — they never join the mentions feed. The CLI
+absorbs the API's async path (a 202 is polled to completion), so `--json`
+stdout is always the completed envelope: `status`, `mentions[]` (each with
+`url`, `title`, `relevance`, `sentiment`, `alreadyInWorkspace`), and `stats`
+(including `mentionsConsumed` — what the search cost against the monthly
+mention quota; already-collected results are free). New results count against
+the monthly mention quota; on the Agents plan each run also consumes one of
+the 50 lifetime searches. At either wall the run exits `6`
+(`UPGRADE_REQUIRED`, envelope carries `upgradeUrl`/`upgradeCommand`); a
+mid-search exhaustion exits `6` with `QUOTA_EXHAUSTED`. When fewer than 10
+lifetime searches remain, ONE warning line goes to stderr (a JSON object
+under `--json`) — stdout stays pure.
+
+#### `signup`
+
+- **`octolens signup`** — Create an Octolens workspace from the terminal (see *Authenticate* above)
+  Flags: `--headless` · `--no-browser` · `--email <v>` · `--signup-id <v>` · `--code <v>` · `--domain <v>` · `--profile <v>`
+  Exits: 0, 1, 2, 4, 7
+
 #### `slack`
 
 - **`octolens slack channels`** — Search the workspace's Slack channels (feeds a notification's `--slack`)
@@ -591,6 +646,20 @@ delivery did not.
   Flags: `--all` · `--limit <n>`
   Exits: 0, 1, 2
 
+#### `upgrade`
+
+- **`octolens upgrade`** — Open the upgrade page already signed in (single-use link)
+  Flags: `--no-browser`
+  Exits: 0, 1, 2, 3, 5
+
+Mints a single-use, short-lived (10 min) **authenticated** deep link into the
+upgrade page via `POST /org/upgrade-link` (`write` scope — a read-only key
+exits `5`) and opens it on an interactive TTY; headless / `--no-browser` /
+`--json` runs print it (`opened: false`). Works even for `signup --headless`
+workspaces that never had a browser session. Plan-aware: on the Agents plan
+the link lands on the upgrade page; on any other plan it opens the billing
+page and says so — never an error.
+
 #### `version`
 
 - **`octolens version`** — Show the Octolens CLI version and build metadata
@@ -600,16 +669,17 @@ delivery did not.
 
 ## Error codes
 
-The 91 codes this build can emit, grouped by the exit code they map to. **Branch on the exit code first**,
+The 98 codes this build can emit, grouped by the exit code they map to. **Branch on the exit code first**,
 then read `error.code` for the remedy — the exit map is frozen, individual codes
 may be added.
 
 **Exit `1`** — `CONFIG_INVALID`, `INTERNAL_ERROR`, `INVALID_RESPONSE`,
 `REQUEST_TIMEOUT`, `SLACK_CONNECT_TIMEOUT`, `UNEXPECTED_ERROR`
 
-**Exit `2`** — `AMBIGUOUS_KEYWORD`, `AMBIGUOUS_MEMBER`,
+**Exit `2`** — `ALREADY_AUTHENTICATED`, `AMBIGUOUS_KEYWORD`, `AMBIGUOUS_MEMBER`,
 `AUTHOR_FILTERS_UNSUPPORTED`, `AUTHOR_NEEDS_SOURCE`, `AUTHOR_REQUIRED`,
-`BROWSER_LOGIN_REQUIRES_TTY`, `CLEAR_NOT_CONFIRMED`, `COMMAND_NOT_FOUND`,
+`BROWSER_LOGIN_REQUIRES_TTY`, `BROWSER_SIGNUP_REQUIRES_TTY`,
+`CLEAR_NOT_CONFIRMED`, `COMMAND_NOT_FOUND`,
 `CONFLICTING_DESTINATION`, `CONFLICTING_FILTER_FLAGS`, `CONFLICTING_FLAGS`,
 `CONFLICTING_TERM`, `CONFLICTING_VALUE_FLAGS`, `INCOMPLETE_WINDOW`,
 `INVALID_ARGUMENT`, `INVALID_BASE_URL`, `INVALID_DATE`, `INVALID_DAY_OF_WEEK`,
@@ -621,11 +691,11 @@ may be added.
 `INVALID_WINDOW`, `JSON_NOT_SUPPORTED`, `LOGIN_TIMEOUT`, `MISSING_DESTINATION`,
 `MISSING_DESTINATION_TARGET`, `MISSING_KEYWORD`, `MISSING_KEY_VALUE`,
 `MISSING_PROFILE`, `MISSING_REQUIRED_ARGS`, `MISSING_REQUIRED_FLAGS`,
-`NOTHING_TO_UPDATE`, `NOTIFICATION_TEST_NO_DESTINATIONS`, `NO_PROFILE_SELECTED`,
-`NO_STORED_PROFILE`, `NO_UPDATE_FIELDS`, `NO_WEB_PAGE`,
+`MISSING_SIGNUP_ID`, `NOTHING_TO_UPDATE`, `NOTIFICATION_TEST_NO_DESTINATIONS`,
+`NO_PROFILE_SELECTED`, `NO_STORED_PROFILE`, `NO_UPDATE_FIELDS`, `NO_WEB_PAGE`,
 `PROFILE_URL_LINKEDIN_ONLY`, `REJECT_TARGET_CONFLICT`, `REJECT_TARGET_REQUIRED`,
-`UNKNOWN_FEED`, `UNKNOWN_FILTER_LIST`, `UNKNOWN_KEYWORD`, `USAGE_ERROR`,
-`VALIDATION_ERROR`, `WATCH_REQUIRED`, `WINDOW_TOO_LARGE`
+`SIGNUP_TIMEOUT`, `UNKNOWN_FEED`, `UNKNOWN_FILTER_LIST`, `UNKNOWN_KEYWORD`,
+`USAGE_ERROR`, `VALIDATION_ERROR`, `WATCH_REQUIRED`, `WINDOW_TOO_LARGE`
 
 **Exit `3`** — `MISSING_API_KEY`, `NOT_LOGGED_IN`, `NO_CREDENTIALS`, `NO_PROFILES`
 (the no-usable-credential family) · `CONFLICTING_CREDENTIALS`, `INVALID_API_KEY`,
@@ -637,7 +707,9 @@ into a login)
 
 **Exit `5`** — `ADMIN_SCOPE_REQUIRED`, `FORBIDDEN`, `INVITER_REQUIRED`
 
-**Exit `6`** — `PLAN_LIMIT_EXCEEDED`
+**Exit `6`** — `PLAN_LIMIT_EXCEEDED`, `QUOTA_EXHAUSTED` (a search that ran out of
+mention quota mid-run) · the server's `UPGRADE_REQUIRED` (403, Agents plan wall)
+also exits `6`, with `upgradeUrl` / `upgradeCommand` riding on the envelope
 
 **Exit `7`** — `RATE_LIMITED` (carries `retryAfterSeconds` / `resetAt` when the
 server stated them)
@@ -649,10 +721,11 @@ server stated them)
 
 **Exit `10`** — `RESPONSE_LOST`
 
-**Exit derived from the API response** — `KEYWORD_LIMIT_EXCEEDED`, `ORG_NOT_FOUND`
-(minted by the service), `WRITE_FAILED` (status-derived). These follow the same
-mapping rules as the codes above; a `403` carrying a `*LIMIT*`/`*PLAN*` code exits
-`6`, a plain `403` exits `5`.
+**Exit derived from the API response** — `KEYWORD_LIMIT_EXCEEDED`, `NO_ORG_MEMBER`,
+`ORG_NOT_FOUND` (minted by the service), `SEARCH_FAILED` (a failed search
+pipeline — usually exit `1`), `WRITE_FAILED` (status-derived). These follow the
+same mapping rules as the codes above; a `403` carrying a `*LIMIT*`/`*PLAN*`/
+`UPGRADE_*` code exits `6`, a plain `403` exits `5`.
 
 ---
 
@@ -701,12 +774,11 @@ octolens feeds watch --backlog none --json \
 **Wire a Slack alert end to end:**
 
 ```bash
-feed=$(octolens feeds create --name "Negative Reddit" --source reddit \
-         --sentiment negative --json | jq -r '.id')
-ch=$(octolens slack channels --search alerts --json | jq -r '.data[0].id')
-notif=$(octolens notifications create --name "Neg Reddit → Slack" --feed "$feed" \
-          --slack "$ch" --frequency hourly --json | jq -r '.id')
-octolens notifications test "$notif"   # exit 9 = the delivery failed, not the command
+# Each step prints the id the next one needs (42 / C0123ABCDEF / 87 below).
+octolens feeds create --name "Negative Reddit" --source reddit --sentiment negative --json
+octolens slack channels --search alerts --json
+octolens notifications create --name "Neg Reddit to Slack" --feed 42 --slack C0123ABCDEF --frequency hourly --json
+octolens notifications test 87        # exit 9 = the delivery failed, not the command
 ```
 
 ## Gotchas

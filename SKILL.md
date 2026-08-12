@@ -1,16 +1,18 @@
 ---
 name: octolens
-description: Query and manage Octolens social-listening data — brand mentions, keywords, feeds, analytics, and notifications across Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, news, podcasts, and the open web. Use when the user wants to fetch or filter mentions, set up keyword tracking, configure Slack/email/webhook alerts, run sentiment/volume/source analytics, or otherwise interact with their Octolens workspace. Two access paths are covered here: the `octolens` CLI for shell scripts, CI jobs, terminal work and bulk export (stable exit codes, pure `--json`, automatic retries), and the REST API v2 for raw programmatic access, non-Node environments, and anything the CLI does not cover.
+description: Query and manage Octolens social-listening data — run one-time AI-scored searches, fetch brand mentions, and manage keywords, feeds, analytics, and notifications across Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, news, podcasts, and the open web. Use when the user wants to search for what people say about a brand right now, fetch or filter mentions, set up keyword tracking, configure Slack/email/webhook alerts, run sentiment/volume/source analytics, or otherwise interact with their Octolens workspace — including creating one from scratch with `octolens signup`. Two access paths are covered here: the `octolens` CLI for shell scripts, CI jobs, terminal work and bulk export (stable exit codes, pure `--json`, automatic retries), and the REST API v2 for raw programmatic access, non-Node environments, and anything the CLI does not cover.
 license: MIT
 metadata:
   author: octolens
-  version: "3.0"
-compatibility: Requires an Octolens account on a plan with API access (Pro, Scale, or Enterprise). The CLI path needs Node.js 20+ and a shell; the REST path needs internet access.
+  version: "4.0"
+compatibility: Requires an Octolens account on a plan with API access (Agents, Pro, Scale, or Enterprise) — no account is fine too, `octolens signup` creates an Agents-plan workspace from the terminal. The CLI path needs Node.js 20+ and a shell; the REST path needs internet access.
 ---
 
 # Octolens
 
-Octolens is a social-listening platform. A workspace tracks **keywords** (phrases like a brand, competitor, or product). A pipeline collects matching posts — **mentions** — from Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, Stack Overflow, dev.to, news, podcasts, and the open web. Every mention is AI-scored for relevance, classified for sentiment, and given topic **tags**. Users save filter presets as **feeds**, which can drive Slack / email / webhook notifications.
+Octolens is a social-listening platform. A workspace tracks **keywords** (phrases like a brand, competitor, or product). A pipeline collects matching posts — **mentions** — from Reddit, Twitter/X, LinkedIn, YouTube, TikTok, Bluesky, Hacker News, GitHub, Stack Overflow, dev.to, news, podcasts, and the open web. Every mention is AI-scored for relevance, classified for sentiment, and given topic **tags**. Users save filter presets as **feeds**, which can drive Slack / email / webhook notifications. Alongside continuous monitoring there is **on-demand search**: `octolens search "phrase"` (or `POST /api/v2/search`) runs a one-time AI-scored search across the workspace's enabled platforms — results belong to the search and never join the mentions feed.
+
+**Starting from zero?** The CLI creates the account too: `octolens signup` (browser handoff) or `octolens signup --headless` (email → emailed 6-digit code → company domain, fully scriptable, resumable two-step under `--json`) creates an **Agents-plan** workspace — 50 lifetime searches + 5,000 AI-scored mentions/month — and finishes with a stored, validated API key. When the allowance runs out the server answers `403 UPGRADE_REQUIRED` (CLI exit `6`) whose envelope carries `upgradeUrl` and `upgradeCommand`; `octolens upgrade` mints a single-use, already-authenticated link into the upgrade page.
 
 This skill covers two ways to work with Octolens, and the right one depends on where you are running.
 
@@ -45,6 +47,16 @@ octolens whoami                  # confirms workspace, auth source, and key scop
 
 An `OCTOLENS_API_KEY` in the environment outranks any stored profile. Scopes are the same API-key scopes as REST (`read` < `write` < `admin`).
 
+**No account yet?** `octolens signup` creates the workspace and ends authenticated — browser handoff by default; `--headless` runs entirely in the terminal (resumable two-step under `--json`: `octolens signup --headless --email you@corp.com --json` sends the code, then `--signup-id … --code … --domain …` finishes and stores the key). An already-authenticated CLI is refused (`ALREADY_AUTHENTICATED`, exit `2`) — signup never mints a second workspace by accident.
+
+### Search on demand
+
+```bash
+octolens search "your brand" --days 7 --json     # one-time AI-scored search, no keyword setup
+```
+
+`--days 1|7|30`, `--source reddit,twitter,…`, `--min-relevance high|medium|low`, `--max-results 1–500`. The CLI absorbs the async path (a long-running search is polled to completion), so stdout is always the completed envelope. Results never join the mentions feed. On the Agents plan searches draw on a lifetime allowance of 50 (plus 5,000 AI-scored mentions/month); at the wall the run exits `6` (`UPGRADE_REQUIRED`, with `upgradeUrl`/`upgradeCommand` in the envelope) and `octolens upgrade` opens the upgrade page already signed in.
+
 ### The `--json` contract
 
 `--json` emits **exactly one** JSON document on stdout with no decoration; diagnostics and the error envelope (`{ "error": { "code", "message", "status" } }`) go to stderr. stdout is 0 bytes of noise, stderr is 0 bytes on success. `--json` also forces non-interactive mode — a `--json` run never prompts; missing input exits `2` naming the flag to pass. (The one exception: `feeds watch --json` streams NDJSON, one mention per line.)
@@ -64,6 +76,9 @@ The two that catch people out: **exit `9`** means the command worked and the thi
 ### High-value examples
 
 ```bash
+# What are people saying about a brand RIGHT NOW — no keyword setup first
+octolens search "acme corp" --days 7 --min-relevance high --json | jq -r '.mentions[].url'
+
 # Filter by keyword NAME — no id lookup needed, unlike REST
 octolens mentions list --keyword 'acme corp' --sentiment negative --since 2026-06-01 --json
 
@@ -78,16 +93,16 @@ case $? in
   3)  echo "set OCTOLENS_API_KEY" >&2; exit 3 ;;
 esac
 
-# Wire a Slack alert end to end
-feed=$(octolens feeds create --name "Negative Reddit" --source reddit --sentiment negative --json | jq -r '.id')
-ch=$(octolens slack channels --search alerts --json | jq -r '.data[0].id')
-octolens notifications create --name "Neg Reddit → Slack" --feed "$feed" --slack "$ch" --frequency hourly --json
+# Wire a Slack alert end to end (42 / C0123ABCDEF = the id each step printed)
+octolens feeds create --name "Negative Reddit" --source reddit --sentiment negative --json
+octolens slack channels --search alerts --json
+octolens notifications create --name "Neg Reddit to Slack" --feed 42 --slack C0123ABCDEF --frequency hourly --json
 
 # Stream new mentions and act on each one
 octolens feeds watch --backlog none --json | jq -r --unbuffered 'select(.type != "error") | .sourceId'
 ```
 
-Command groups: `mentions`, `keywords`, `feeds`, `notifications`, `filters`, `suggestions`, `analytics`, `dashboard`, `tags`, `feedback`, `slack`, `members`, `org`, `company`, `billing`, plus `login`/`logout`/`switch`/`whoami`/`init`/`version`. `octolens help <group>` is always available.
+Command groups: `search`, `mentions`, `keywords`, `feeds`, `notifications`, `filters`, `suggestions`, `analytics`, `dashboard`, `tags`, `feedback`, `slack`, `members`, `org`, `company`, `billing`, plus `signup`/`login`/`logout`/`switch`/`whoami`/`upgrade`/`init`/`version`. `octolens help <group>` is always available.
 
 Every command, flag, exit code and error code is in **[references/CLI.md](references/CLI.md)** — read it on demand for exact flag names, pagination rules, or the error taxonomy.
 
@@ -98,6 +113,7 @@ Every command, flag, exit code and error code is in **[references/CLI.md](refere
 - `mentions engage` without `--engaged true|false` **toggles** — always pass the explicit value in automation.
 - `analytics`/`dashboard` need `--since` and `--until` together; `mentions` accepts either alone.
 - A read-scoped key hitting a write command exits `5`, not `3` — mint a `write` key rather than logging in again.
+- `octolens search` exits `6` at the Agents-plan quota wall (`UPGRADE_REQUIRED`, envelope carries `upgradeUrl`/`upgradeCommand`) — recover with `octolens upgrade`, never by retrying. `octolens org usage --json` reports the remaining allowance (`searches: {used, limit, remaining}` on the Agents plan).
 
 ---
 
@@ -129,13 +145,15 @@ curl "https://app.octolens.com/api/v2/keywords" \
 
 - **Envelope:** successful reads return `{ "data": [...] }`; list endpoints add `{ "pagination": { "nextCursor": <string|null> } }`. Writes return the affected object or `{ "ok": true }` / `{ "success": true }`.
 - **Pagination:** omit `cursor` for page one; pass the response's `pagination.nextCursor` back unchanged. `null` means no more pages.
-- **Rate limit:** 500 requests/hour per org. Watch `X-RateLimit-Remaining` / `X-RateLimit-Reset`; on 429 honor `Retry-After`.
-- **Errors:** non-2xx returns `{ "error": { "code", "message", "status", "details?" } }`. Codes include `UNAUTHORIZED` (401), `FORBIDDEN` (403, wrong scope / no API plan), `VALIDATION_ERROR` (400, with a `details` array), `*_NOT_FOUND` (404), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500).
+- **Rate limit:** 500 requests/hour per org. Watch `X-RateLimit-Remaining` / `X-RateLimit-Reset`; on 429 honor `Retry-After`. The search routes additionally send remaining-quota headers on success — `X-Octolens-Mentions-Remaining` (all plans) and `X-Octolens-Searches-Remaining` (plans with a lifetime search cap, i.e. Agents) — so a client can self-throttle before hitting the quota wall.
+- **Errors:** non-2xx returns `{ "error": { "code", "message", "status", "details?" } }`. Codes include `UNAUTHORIZED` (401), `FORBIDDEN` (403, wrong scope / no API plan), `VALIDATION_ERROR` (400, with a `details` array), `*_NOT_FOUND` (404), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500). Additive per-code fields ride alongside the standard three: `UPGRADE_REQUIRED` (403 — an Agents-plan cap was hit) carries `upgradeUrl` and `upgradeCommand` (`octolens upgrade`); `QUOTA_EXCEEDED` (402) is the monthly mention quota on non-Agents plans.
 
 ### Most-used endpoints
 
 | Method & path | Purpose |
 |---|---|
+| `POST /search` | Run a one-time AI-scored search (200 completed, or 202 + `pollUrl`) |
+| `GET /search/{searchId}` | Poll a running search; `GET /search` lists past searches |
 | `POST /mentions` | List/filter mentions (read; filters in body) |
 | `POST /mentions/export` | Export up to 50k mentions as `json` or `csv` |
 | `GET /mentions/{sourceId}` | Fetch one mention |
@@ -217,7 +235,7 @@ To build a filter from plain English, POST the request to `/api/v2/ai/filter-wiz
 ## Workflow
 
 1. Pick a path (above): the CLI if you're in a shell or a CI job, REST otherwise.
-2. Confirm the credential: both paths need an API key in `$OCTOLENS_API_KEY` (CLI alternative: `octolens login`). Verify with `octolens whoami` on the CLI path.
+2. Confirm the credential: both paths need an API key in `$OCTOLENS_API_KEY` (CLI alternative: `octolens login`; no account at all → `octolens signup`, or `octolens signup --headless` from a bare shell). Verify with `octolens whoami` on the CLI path.
 3. If filtering by keyword on REST, list keywords first to get IDs. The CLI resolves names for you.
 4. Build the smallest filter that answers the question; prefer simple mode, drop to advanced only for cross-field OR logic. Or use the filter wizard (`POST /ai/filter-wizard`, or `octolens feeds create --ai "…"`).
 5. Execute; paginate only if the user needs more than one page (REST: `nextCursor`; CLI: `--limit` / `--all`).
