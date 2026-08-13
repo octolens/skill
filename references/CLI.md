@@ -69,8 +69,11 @@ commands need no extra flag. An env `OCTOLENS_API_KEY` replaces the profile's
 key, never its pinned deployment; only `--base-url` / `OCTOLENS_BASE_URL`
 retargets a run.
 
-`octolens whoami` reports the active workspace, the auth source (`env` vs
-`profile`) and the key's scope — the cheapest preflight in a script.
+`octolens whoami` is the cheapest preflight in a script: `--json` reports the
+active workspace, the auth source (`env` vs `profile`) and the key's scope. On
+a terminal it renders the identity a human cares about — your email, the
+workspace + company domain, a one-line company headline, the plan label and
+scope (the technical fields stay in `--json`).
 
 **Scopes are the API-key scopes** (`read` < `write` < `admin`). A read key
 calling a write command fails with `FORBIDDEN` / exit `5`, not `3`.
@@ -444,7 +447,7 @@ clears a comma-separated field.
   Exits: 0, 1, 2
 - **`octolens switch [PROFILE]`** — Switch the active workspace profile
   Exits: 0, 1, 2, 3, 4, 8
-- **`octolens whoami`** — Show the active login: workspace, auth source (env vs profile), and scope
+- **`octolens whoami`** — Show the active login: who you are, workspace, plan, and scope
   Exits: 0, 1, 2, 3
 
 A valueless `--with-key` opens a masked paste prompt on a TTY; headless it exits
