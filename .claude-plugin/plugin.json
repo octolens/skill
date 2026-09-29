@@ -1,0 +1,19 @@
+{
+  "name": "octolens",
+  "description": "Octolens social listening for coding agents: search what people say about a brand, fetch and triage mentions, manage keywords, feeds and Slack/email/webhook alerts, and run analytics across Reddit, X, LinkedIn, YouTube, TikTok, Hacker News, GitHub and more. Bundles the Octolens skill (CLI + REST API v2) and the hosted Octolens MCP server (OAuth sign-in).",
+  "author": {
+    "name": "Octolens",
+    "url": "https://octolens.com"
+  },
+  "homepage": "https://octolens.com/docs",
+  "repository": "https://github.com/octolens/skill",
+  "license": "MIT",
+  "keywords": [
+    "octolens",
+    "social-listening",
+    "brand-monitoring",
+    "mentions",
+    "mcp",
+    "claude-code-plugin"
+  ]
+}

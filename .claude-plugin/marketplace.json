@@ -1,0 +1,16 @@
+{
+  "name": "octolens",
+  "owner": {
+    "name": "Octolens",
+    "url": "https://octolens.com"
+  },
+  "description": "Octolens social listening for coding agents — the Octolens skill (CLI + REST API v2) and the hosted Octolens MCP server.",
+  "plugins": [
+    {
+      "name": "octolens",
+      "source": "./",
+      "description": "Search, triage and analyze brand mentions and manage keywords, feeds and alerts in Octolens.",
+      "category": "productivity"
+    }
+  ]
+}

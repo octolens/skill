@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "octolens": {
+      "type": "http",
+      "url": "https://app.octolens.com/api/mcp/v2"
+    }
+  }
+}

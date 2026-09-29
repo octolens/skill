@@ -11,11 +11,29 @@ signup` creates a workspace from the terminal.
 
 ## Install
 
+**Claude Code** — plugin (the skill + the Octolens MCP server):
+
+```bash
+claude plugin marketplace add octolens/skill
+claude plugin install octolens@octolens
+```
+
+**Codex** — plugin (the skill + the Octolens MCP server):
+
+```bash
+codex plugin marketplace add octolens/skill
+codex plugin add octolens@octolens
+```
+
+**Any other agent** — the skill alone, via [skills.sh](https://skills.sh/octolens/skill):
+
 ```bash
 npx skills add octolens/skill
 ```
 
-Or browse it on [skills.sh](https://skills.sh/octolens/skill).
+Start a new agent session after installing. The plugin's MCP server
+(`https://app.octolens.com/api/mcp/v2`) signs in with OAuth the first time a
+tool is used — run `/mcp` in Claude Code, or `codex mcp login octolens`.
 
 ## Two ways to connect
 
@@ -40,9 +58,12 @@ docs: <https://octolens.com/docs/mcp/v2/overview>.
 
 ## Files
 
-- [SKILL.md](SKILL.md) — CLI vs REST, auth, mention filtering, gotchas.
-- [references/CLI.md](references/CLI.md) — complete command, exit-code, and error-code reference.
-- [references/REST-API.md](references/REST-API.md) — complete endpoint catalog.
+- [skills/octolens/SKILL.md](skills/octolens/SKILL.md) — CLI vs REST, auth, mention filtering, gotchas.
+- [skills/octolens/references/CLI.md](skills/octolens/references/CLI.md) — complete command, exit-code, and error-code reference.
+- [skills/octolens/references/REST-API.md](skills/octolens/references/REST-API.md) — complete endpoint catalog.
+- [.mcp.json](.mcp.json) — the hosted Octolens MCP server the plugins register.
+- [.claude-plugin/](.claude-plugin/) and [.codex-plugin/](.codex-plugin/) + [.agents/plugins/](.agents/plugins/) — the
+  Claude Code and Codex plugin + marketplace manifests (this repository is its own marketplace).
 
 ## Requirements
 
